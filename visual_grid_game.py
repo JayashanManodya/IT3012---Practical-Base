@@ -10,6 +10,7 @@ class VisualGridHuntGame:
         self.width = width
         self.height = height
         self.agent_pos = [0, 0]  # Starting position (x, y)
+        self.agent_dir = 'Up'   # Current facing direction
 
         if custom_walls is not None:
             self.walls = set(custom_walls)
@@ -49,12 +50,30 @@ class VisualGridHuntGame:
         self.collision = False
 
     def get_percept(self) -> dict:
+        """Returns local boolean sensors instead of exact global coordinates (Partial Observability)."""
+        ax, ay = self.agent_pos
+        dx, dy = 0, 0
+        if self.agent_dir == 'Up':
+            dy = 1
+        elif self.agent_dir == 'Down':
+            dy = -1
+        elif self.agent_dir == 'Left':
+            dx = -1
+        elif self.agent_dir == 'Right':
+            dx = 1
+
+        ahead_pos = (ax + dx, ay + dy)
+        is_out_of_bounds = not (0 <= ahead_pos[0] < self.width and 0 <= ahead_pos[1] < self.height)
+        wall_ahead = is_out_of_bounds or (ahead_pos in self.walls)
+        food_here = tuple(self.agent_pos) in self.food_positions
+        food_ahead = ahead_pos in self.food_positions if not is_out_of_bounds else False
+        toxin_here = tuple(self.agent_pos) in self.toxic_traps
+
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
+            'wall_ahead': wall_ahead,
+            'food_here': food_here,
+            'food_ahead': food_ahead,
+            'toxin_here': toxin_here,
             'collision': self.collision,
             'score': self.score,
             'remaining_food': len(self.food_positions)
@@ -62,6 +81,9 @@ class VisualGridHuntGame:
 
     def execute_action(self, action: str):
         self.steps += 1
+        if action in ['Up', 'Down', 'Left', 'Right']:
+            self.agent_dir = action
+
         new_pos = list(self.agent_pos)
 
         if action == 'Up':
