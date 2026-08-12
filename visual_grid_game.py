@@ -81,6 +81,19 @@ class VisualGridHuntGame:
 
     def execute_action(self, action: str):
         self.steps += 1
+        
+        # Handle relative turning and moving actions
+        if action == 'TurnLeft':
+            ccw = ['Up', 'Left', 'Down', 'Right']
+            self.agent_dir = ccw[(ccw.index(self.agent_dir) + 1) % 4]
+            return
+        elif action == 'TurnRight':
+            cw = ['Up', 'Right', 'Down', 'Left']
+            self.agent_dir = cw[(cw.index(self.agent_dir) + 1) % 4]
+            return
+        elif action == 'MoveForward':
+            action = self.agent_dir
+
         if action in ['Up', 'Down', 'Left', 'Right']:
             self.agent_dir = action
 
@@ -127,6 +140,21 @@ class VisualGridHuntGame:
         return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
 
 
+class SimpleReflexAgent:
+    """A Simple Reflex Agent using strict Condition-Action (IF-THEN) rules.
+    It has NO memory or internal state history.
+    """
+
+    def sense_and_act(self, percept: dict) -> str:
+        """Condition-Action rules:
+        IF wall_ahead THEN turn_left; ELSE move_forward
+        """
+        if percept.get('wall_ahead', False):
+            return 'TurnLeft'
+        else:
+            return 'MoveForward'
+
+
 class GridGameGUI:
     """Tkinter wrapper that dynamically scales cell sizes to keep larger grids on screen."""
 
@@ -136,6 +164,7 @@ class GridGameGUI:
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       num_traps=num_traps, custom_walls=walls)
+        self.agent = SimpleReflexAgent()
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
@@ -212,7 +241,8 @@ class GridGameGUI:
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+                percept = self.env.get_percept()
+                action = self.agent.sense_and_act(percept)
                 self.env.execute_action(action)
 
                 self.draw_grid()
