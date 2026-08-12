@@ -155,6 +155,81 @@ class SimpleReflexAgent:
             return 'MoveForward'
 
 
+class ModelBasedAgent:
+    """A Model-Based Agent that maintains internal state and memory (visited cells).
+    Uses state memory to break out of infinite loops in partially observable environments.
+    """
+
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        self.direction = 'Up'
+        self.visited_cells = {(0, 0)}
+        self.last_action = None
+
+    def update_state(self, percept: dict):
+        """Updates internal position, direction, and visited history based on the last action."""
+        if self.last_action == 'TurnLeft':
+            ccw = ['Up', 'Left', 'Down', 'Right']
+            self.direction = ccw[(ccw.index(self.direction) + 1) % 4]
+        elif self.last_action == 'TurnRight':
+            cw = ['Up', 'Right', 'Down', 'Left']
+            self.direction = cw[(cw.index(self.direction) + 1) % 4]
+        elif self.last_action == 'MoveForward':
+            # Calculate step offset based on facing direction
+            dx, dy = 0, 0
+            if self.direction == 'Up':
+                dy = 1
+            elif self.direction == 'Down':
+                dy = -1
+            elif self.direction == 'Left':
+                dx = -1
+            elif self.direction == 'Right':
+                dx = 1
+
+            # Only update coordinates if not blocked by a wall in the previous step
+            if not percept.get('hit_wall', False):
+                self.x += dx
+                self.y += dy
+                self.visited_cells.add((self.x, self.y))
+
+    def sense_and_act(self, percept: dict) -> str:
+        """First updates internal state model, then applies rules querying memory."""
+        if self.last_action is not None:
+            self.update_state(percept)
+
+        # Determine relative left cell position
+        left_dir_map = {'Up': 'Left', 'Left': 'Down', 'Down': 'Right', 'Right': 'Up'}
+        left_dir = left_dir_map[self.direction]
+        ldx, ldy = 0, 0
+        if left_dir == 'Up': ldy = 1
+        elif left_dir == 'Down': ldy = -1
+        elif left_dir == 'Left': ldx = -1
+        elif left_dir == 'Right': ldx = 1
+
+        left_cell = (self.x + ldx, self.y + ldy)
+        left_is_visited = left_cell in self.visited_cells
+
+        # Memory-informed IF-THEN rules
+        if percept.get('wall_ahead', False):
+            # If we turned left and still face a wall, continue turning to find an open heading
+            if self.last_action == 'TurnLeft':
+                action = 'TurnLeft'
+            elif left_is_visited:
+                action = 'TurnRight'
+            else:
+                action = 'TurnLeft'
+        else:
+            # If path ahead is clear, check if left cell is unvisited to explore new ground
+            if not left_is_visited and self.last_action not in ['TurnLeft', 'TurnRight']:
+                action = 'TurnLeft'
+            else:
+                action = 'MoveForward'
+
+        self.last_action = action
+        return action
+
+
 class GridGameGUI:
     """Tkinter wrapper that dynamically scales cell sizes to keep larger grids on screen."""
 
@@ -164,7 +239,7 @@ class GridGameGUI:
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       num_traps=num_traps, custom_walls=walls)
-        self.agent = SimpleReflexAgent()
+        self.agent = ModelBasedAgent()
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
