@@ -1,5 +1,6 @@
 from collections import deque
 import heapq
+import math
 
 
 class SimpleReflexAgent:
@@ -41,6 +42,45 @@ class SearchAgent:
     def __init__(self):
         self.plan = []
         self.active_algo = 'BFS'
+
+    def manhattan_distance(self, pos, goal):
+        x1, y1 = pos
+        x2, y2 = goal
+        return int(abs(x1 - x2) + abs(y1 - y2))
+
+    def euclidean_distance(self, pos, goal):
+        x1, y1 = pos
+        x2, y2 = goal
+        return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+
+
+    def astar_search(self, start_pos, goal_pos, walls, grid_size, heuristic_type='manhattan'):
+        walls = set(walls)
+        heuristic = self.euclidean_distance if heuristic_type.lower() == 'euclidean' else self.manhattan_distance
+        priority_queue = []
+        reached_states = set()
+        start_g_cost = 0
+        start_f_cost = start_g_cost + heuristic(start_pos, goal_pos)
+        heapq.heappush(priority_queue, (start_f_cost, start_g_cost, start_pos, []))
+
+        while priority_queue:
+            f_cost, g_cost, current_pos, path_taken = heapq.heappop(priority_queue)
+            if current_pos == goal_pos:
+                return path_taken
+            if current_pos in reached_states:
+                continue
+            reached_states.add(current_pos)
+
+            for action, next_pos in self._valid_moves(current_pos, walls, grid_size):
+                if next_pos in reached_states:
+                    continue
+                new_g_cost = g_cost + 1
+                new_h_cost = heuristic(next_pos, goal_pos)
+                new_f_cost = new_g_cost + new_h_cost
+                new_path = path_taken + [action]
+                heapq.heappush(priority_queue, (new_f_cost, new_g_cost, next_pos, new_path))
+
+        return []
 
     MOVE_DELTAS = {
         'Up': (0, 1),
@@ -152,7 +192,8 @@ class SearchAgent:
             return self.plan.pop(0)
 
         all_food = percept.get('all_food', [])
-        if not all_food:
+        remaining_food = percept.get('remaining_food', len(all_food))
+        if remaining_food == 0 or not all_food:
             return 'Up'
 
         start_pos = tuple(percept.get('agent_pos', (0, 0)))
@@ -161,16 +202,17 @@ class SearchAgent:
 
         closest_food = min(all_food, key=lambda food: abs(food[0] - start_pos[0]) + abs(food[1] - start_pos[1]))
         algo_name = self.active_algo.upper()
-        search_fn = {
-            'BFS': self.bfs_search,
-            'DFS': self.dfs_search,
-            'UCS': self.ucs_search,
-        }.get(algo_name)
+        if algo_name == 'BFS':
+            self.plan = self.bfs_search(start_pos, closest_food, walls, grid_size)
+        elif algo_name == 'DFS':
+            self.plan = self.dfs_search(start_pos, closest_food, walls, grid_size)
+        elif algo_name == 'UCS':
+            self.plan = self.ucs_search(start_pos, closest_food, walls, grid_size)
+        elif self.active_algo == 'AStar':
+            self.plan = self.astar_search(start_pos, closest_food, walls, grid_size)
+        else:
+            self.plan = self.bfs_search(start_pos, closest_food, walls, grid_size)
 
-        if search_fn is None:
-            search_fn = self.bfs_search
-
-        self.plan = search_fn(start_pos, closest_food, walls, grid_size)
         if not self.plan:
             return 'Up'
         return self.plan.pop(0)
@@ -186,3 +228,11 @@ class GreedyGridAgent:
         # If standing directly on food, or just wander / move towards coordinates
         pos = percept.get('agent_pos', (0, 0))
         return self.actions_pool[0]
+
+
+if __name__ == '__main__':
+    search_agent = SearchAgent()
+    mock_start = (0, 0)
+    mock_goal = (3, 4)
+    print(search_agent.manhattan_distance(mock_start, mock_goal))
+    print(search_agent.euclidean_distance(mock_start, mock_goal))
